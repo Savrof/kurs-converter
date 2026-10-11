@@ -52,6 +52,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   display: grid;
   gap: 32px;
 }
+/* let wide children (the matrix) scroll inside their own box instead of widening the page */
+.page > * { min-width: 0; }
 
 /* Masthead */
 .masthead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
