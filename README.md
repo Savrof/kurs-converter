@@ -45,5 +45,7 @@ cd backend && pytest
 
 ## Демо одним файлом
 
-`python tools/build_demo.py` собирает `demo/kurs-demo.html`: тот же `App.jsx`, но без бэкенда.
+`python tools/build_demo.py` собирает `demo/kurs-demo.html` и `index.html` в корне (для GitHub Pages): тот же `App.jsx`, но без бэкенда.
 Курсы берутся напрямую из публичных API в браузере, а если они недоступны, показываются примерные значения с пометкой «демо-курсы».
+
+GitHub Pages: Settings → Pages → Deploy from a branch → `main` / `(root)`. Демо откроется на `https://savrof.github.io/kurs-converter/`.

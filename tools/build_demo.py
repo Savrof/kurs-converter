@@ -1,4 +1,5 @@
-"""Bundle the React UI into one self-contained HTML file (demo/kurs-demo.html).
+"""Bundle the React UI into one self-contained HTML file (demo/kurs-demo.html),
+plus a full-document copy at index.html for GitHub Pages.
 
 The demo swaps the backend API client for demo/api.demo.js and compiles JSX in
 the browser with Babel, so it opens without npm or a running backend.
@@ -37,3 +38,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 out = ROOT / "demo" / "kurs-demo.html"
 out.write_text(html, encoding="utf-8")
 print(f"wrote {out} ({len(html) // 1024} KB)")
+
+# Full document for GitHub Pages (the artifact host adds its own skeleton, Pages does not).
+page = (
+    '<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="UTF-8">\n'
+    '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
+    + html.replace('<div id="root">', '</head>\n<body>\n<div id="root">', 1)
+    + "</body>\n</html>\n"
+)
+index = ROOT / "index.html"
+index.write_text(page, encoding="utf-8")
+print(f"wrote {index}")
