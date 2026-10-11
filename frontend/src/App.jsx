@@ -3,6 +3,7 @@ import { loadRates } from "./api";
 
 const CURRENCIES = [
   { code: "RUB", name: "Российский рубль", sign: "₽", decimals: 2, kind: "fiat" },
+  { code: "USD", name: "Доллар США", sign: "$", decimals: 2, kind: "fiat" },
   { code: "IDR", name: "Индонезийская рупия", sign: "Rp", decimals: 0, kind: "fiat" },
   { code: "BTC", name: "Bitcoin", sign: "₿", decimals: 8, kind: "crypto" },
   { code: "ETH", name: "Ethereum", sign: "Ξ", decimals: 6, kind: "crypto" },
@@ -165,7 +166,7 @@ export default function App() {
           <span className="brand__mark" aria-hidden="true">₽⇄₿</span>
           <div>
             <h1>Kurs</h1>
-            <p className="brand__sub">Рубль, рупия, биткоин и эфир по текущему курсу</p>
+            <p className="brand__sub">Рубль, доллар, рупия, биткоин и эфир по текущему курсу</p>
           </div>
         </div>
         <div className="status">
@@ -260,11 +261,6 @@ export default function App() {
             </tbody>
           </table>
         </div>
-        {rates && (
-          <p className="usd-note">
-            В долларах: 1 BTC = {fmtRate(1 / rates.BTC)} USD · 1 ETH = {fmtRate(1 / rates.ETH)} USD · 1 USD = {fmtRate(rates.RUB)} RUB = {fmtRate(rates.IDR)} IDR
-          </p>
-        )}
       </section>
 
       <footer className="foot">

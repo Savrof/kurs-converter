@@ -11,6 +11,7 @@
   --up: #1d7a46;
   --down: #b4322a;
   --rub: #2d5ca8;
+  --usd: #5f7a1f;
   --idr: #c23b2e;
   --btc: #d9811a;
   --eth: #5a63c4;
@@ -22,14 +23,14 @@
   :root:not([data-theme="light"]) {
     --paper: #0c1715; --surface: #12211e; --ink: #e2ede8; --muted: #8fa9a1; --line: #23392f;
     --accent: #3fbfa3; --accent-ink: #062019; --guilloche: #3fbfa3; --up: #4cc47f; --down: #f07a6e;
-    --rub: #7aa3f0; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
+    --rub: #7aa3f0; --usd: #b6cf6a; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --paper: #0c1715; --surface: #12211e; --ink: #e2ede8; --muted: #8fa9a1; --line: #23392f;
   --accent: #3fbfa3; --accent-ink: #062019; --guilloche: #3fbfa3; --up: #4cc47f; --down: #f07a6e;
-  --rub: #7aa3f0; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
+  --rub: #7aa3f0; --usd: #b6cf6a; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
   color-scheme: dark;
 }
 
@@ -124,7 +125,7 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 .chip:hover { border-color: var(--c); }
 .chip[aria-checked="true"] { background: var(--c); border-color: var(--c); color: var(--surface); }
 .chip[aria-checked="true"] .chip__sign { color: inherit; }
-.chip--rub { --c: var(--rub); } .chip--idr { --c: var(--idr); }
+.chip--rub { --c: var(--rub); } .chip--usd { --c: var(--usd); } .chip--idr { --c: var(--idr); }
 .chip--btc { --c: var(--btc); } .chip--eth { --c: var(--eth); }
 
 .amount, .result {
@@ -168,7 +169,7 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
   font-family: var(--font-display); font-weight: 500; font-size: 16px;
   margin: 0 0 14px; text-wrap: balance;
 }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
 .tile {
   --c: var(--accent);
   display: grid; gap: 4px; text-align: left; min-width: 0;
@@ -180,11 +181,11 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 .tile__code { font-family: var(--font-num); font-size: 12px; font-weight: 600; color: var(--c); letter-spacing: 0.04em; }
 .tile__value { font-family: var(--font-num); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .tile__name { font-size: 12px; color: var(--muted); }
-.tile--rub { --c: var(--rub); } .tile--idr { --c: var(--idr); }
+.tile--rub { --c: var(--rub); } .tile--usd { --c: var(--usd); } .tile--idr { --c: var(--idr); }
 .tile--btc { --c: var(--btc); } .tile--eth { --c: var(--eth); }
 
 .matrix-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-.matrix { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 560px; }
+.matrix { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 660px; }
 .matrix th, .matrix td { padding: 11px 14px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .matrix tbody tr:last-child > * { border-bottom: 0; }
 .matrix thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 700; }
@@ -194,11 +195,10 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 .matrix td.same { color: var(--muted); }
 .matrix tbody tr:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
-.dot--rub { background: var(--rub); } .dot--idr { background: var(--idr); }
+.dot--rub { background: var(--rub); } .dot--usd { background: var(--usd); } .dot--idr { background: var(--idr); }
 .dot--btc { background: var(--btc); } .dot--eth { background: var(--eth); }
 .delta { display: block; font-family: var(--font-body); font-size: 11px; font-weight: 600; margin-top: 2px; padding-left: 16px; }
 .delta--up { color: var(--up); } .delta--down { color: var(--down); }
-.usd-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .foot { display: grid; gap: 6px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
 .foot p { margin: 0; }

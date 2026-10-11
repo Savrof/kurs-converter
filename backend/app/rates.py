@@ -16,7 +16,7 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-CURRENCIES = ("RUB", "IDR", "BTC", "ETH")
+CURRENCIES = ("RUB", "USD", "IDR", "BTC", "ETH")
 FIAT = ("RUB", "IDR")
 CRYPTO = {"BTC": "bitcoin", "ETH": "ethereum"}
 
