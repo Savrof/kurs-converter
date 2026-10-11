@@ -7,12 +7,14 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;500;600;700&family=Unbounded:wght@500;700&display=swap">
 <style>
 /* Layout: single column "banknote ticket" up top, then tiles and a cross-rate matrix. */
+/* Soft UI: the converter is raised out of the page with a light/dark shadow pair,
+   its inputs are pressed in. Everything else stays flat with hairline borders. */
 :root {
-  --paper: #eaf0ec;
-  --surface: #f7faf8;
-  --ink: #12302a;
-  --muted: #557069;
-  --line: #c9d8d1;
+  --paper: #e6ebe8;
+  --surface: #f1f4f2;
+  --ink: #15302a;
+  --muted: #5b716a;
+  --line: #d2dbd7;
   --accent: #0f6a5a;
   --accent-ink: #f2fbf7;
   --guilloche: #0f6a5a;
@@ -23,22 +25,34 @@
   --idr: #c23b2e;
   --btc: #d9811a;
   --eth: #5a63c4;
+  --hi: rgba(255, 255, 255, 0.95);
+  --lo: rgba(140, 160, 152, 0.55);
+  --convex-a: #eef2f0;
+  --convex-b: #dde3e0;
   --font-display: "Unbounded", "Manrope", system-ui, sans-serif;
   --font-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --raised: -10px -10px 26px var(--hi), 12px 12px 30px var(--lo);
+  --raised-sm: -3px -3px 8px var(--hi), 4px 4px 9px var(--lo);
+  --pressed: inset 4px 4px 10px var(--lo), inset -4px -4px 10px var(--hi);
+  --pressed-sm: inset 2px 2px 5px var(--lo), inset -2px -2px 5px var(--hi);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #0c1715; --surface: #12211e; --ink: #e2ede8; --muted: #8fa9a1; --line: #23392f;
+    --paper: #151d1b; --surface: #19221f; --ink: #e2ede8; --muted: #8fa9a1; --line: #253330;
     --accent: #3fbfa3; --accent-ink: #062019; --guilloche: #3fbfa3; --up: #4cc47f; --down: #f07a6e;
     --rub: #7aa3f0; --usd: #b6cf6a; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
+    --hi: rgba(255, 255, 255, 0.05); --lo: rgba(0, 0, 0, 0.6);
+    --convex-a: #19231f; --convex-b: #111815;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --paper: #0c1715; --surface: #12211e; --ink: #e2ede8; --muted: #8fa9a1; --line: #23392f;
+  --paper: #151d1b; --surface: #19221f; --ink: #e2ede8; --muted: #8fa9a1; --line: #253330;
   --accent: #3fbfa3; --accent-ink: #062019; --guilloche: #3fbfa3; --up: #4cc47f; --down: #f07a6e;
   --rub: #7aa3f0; --usd: #b6cf6a; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
+  --hi: rgba(255, 255, 255, 0.05); --lo: rgba(0, 0, 0, 0.6);
+  --convex-a: #19231f; --convex-b: #111815;
   color-scheme: dark;
 }
 
@@ -69,8 +83,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .brand { display: flex; align-items: center; gap: 14px; }
 .brand__mark {
   font-family: var(--font-num); font-weight: 600; font-size: 15px;
-  padding: 10px 12px; border-radius: 10px;
-  background: var(--accent); color: var(--accent-ink);
+  padding: 10px 12px; border-radius: 12px;
+  background: var(--paper); color: var(--accent); box-shadow: var(--raised-sm);
 }
 h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-height: 1; margin: 0; letter-spacing: -0.01em; }
 .brand__sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
@@ -78,9 +92,9 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 
 .pill {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.06em;
-  border: 1px solid var(--line); background: var(--surface);
+  background: var(--paper); box-shadow: var(--pressed-sm);
 }
 .pill__dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .pill--live { color: var(--up); }
@@ -90,81 +104,82 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 @keyframes pulse { 50% { opacity: 0.3; } }
 
 .btn-ghost {
-  padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 600;
-  background: transparent; border: 1px solid var(--line);
+  padding: 8px 16px; border-radius: 12px; font-size: 14px; font-weight: 600;
+  background: var(--paper); border: 0; box-shadow: var(--raised-sm);
+  transition: box-shadow 0.15s, color 0.15s;
 }
-.btn-ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn-ghost:hover:not(:disabled) { color: var(--accent); }
+.btn-ghost:active:not(:disabled) { box-shadow: var(--pressed-sm); }
 .btn-ghost:disabled { opacity: 0.6; cursor: progress; }
 
-/* Ticket: the one decorated object on the page */
+/* Ticket: the one raised object on the page */
 .ticket {
   position: relative; overflow: hidden;
-  display: grid; gap: 18px;
-  padding: 26px 26px 20px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: 0 1px 0 var(--line), 0 18px 40px -28px rgba(10, 40, 34, 0.45);
-}
-.ticket::before {
-  /* perforation like a tear-off exchange slip */
-  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px;
-  background: radial-gradient(circle at 6px -2px, var(--paper) 4px, transparent 4.5px) 0 0 / 14px 6px repeat-x;
+  display: grid; gap: 20px;
+  padding: 30px 30px 22px;
+  background: linear-gradient(145deg, var(--convex-a), var(--convex-b));
+  border-radius: 28px;
+  box-shadow: var(--raised);
 }
 .guilloche {
   position: absolute; inset: 0; width: 100%; height: 100%;
-  color: var(--guilloche); opacity: 0.22; pointer-events: none;
+  color: var(--guilloche); opacity: 0.1; pointer-events: none;
 }
-.ticket__row { position: relative; display: grid; gap: 10px; }
+.ticket__row { position: relative; display: grid; gap: 12px; }
 .label {
   font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
 }
 
-.picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.picker { display: flex; flex-wrap: wrap; gap: 10px; }
 .chip {
   --c: var(--accent);
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 13px; border-radius: 999px;
-  font-family: var(--font-num); font-size: 13px; font-weight: 600;
-  background: var(--paper); border: 1px solid var(--line);
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  padding: 7px 14px; border-radius: 999px;
+  font-family: var(--font-num); font-size: 13px; font-weight: 600; color: var(--muted);
+  background: var(--paper); border: 0; box-shadow: var(--raised-sm);
+  transition: box-shadow 0.15s, color 0.15s;
 }
 .chip__sign { color: var(--c); }
-.chip:hover { border-color: var(--c); }
-.chip[aria-checked="true"] { background: var(--c); border-color: var(--c); color: var(--surface); }
-.chip[aria-checked="true"] .chip__sign { color: inherit; }
+.chip:hover { color: var(--ink); }
+.chip[aria-checked="true"] { box-shadow: var(--pressed-sm); color: var(--c); }
 .chip--rub { --c: var(--rub); } .chip--usd { --c: var(--usd); } .chip--idr { --c: var(--idr); }
 .chip--btc { --c: var(--btc); } .chip--eth { --c: var(--eth); }
 
 .amount, .result {
   display: flex; align-items: baseline; gap: 12px; min-width: 0;
-  border-bottom: 2px solid var(--line); padding-bottom: 6px;
+  padding: 12px 18px; border-radius: 18px;
+  background: var(--paper); box-shadow: var(--pressed);
 }
-.amount:focus-within { border-color: var(--accent); }
+.amount:focus-within { box-shadow: var(--pressed), 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
 .amount input {
   flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink);
-  font-family: var(--font-num); font-size: clamp(26px, 6vw, 40px); font-weight: 600;
+  font-family: var(--font-num); font-size: clamp(26px, 6vw, 38px); font-weight: 600;
   font-variant-numeric: tabular-nums; padding: 0;
 }
 .amount input:focus { outline: none; }
 .result__value {
   flex: 1; min-width: 0; overflow-wrap: anywhere;
-  font-family: var(--font-num); font-size: clamp(26px, 6vw, 40px); font-weight: 600;
+  font-family: var(--font-num); font-size: clamp(26px, 6vw, 38px); font-weight: 600;
   font-variant-numeric: tabular-nums; color: var(--accent);
 }
-.amount__code { font-family: var(--font-display); font-size: 15px; font-weight: 500; color: var(--muted); }
+.amount__code { font-family: var(--font-display); font-size: 14px; font-weight: 500; color: var(--muted); }
 
 .swap {
   position: relative; justify-self: start;
-  width: 42px; height: 42px; border-radius: 50%;
-  border: 1px solid var(--line); background: var(--paper); font-size: 20px;
-  transition: transform 0.25s;
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 0; background: var(--paper); font-size: 20px; color: var(--muted);
+  box-shadow: var(--raised-sm);
+  transition: box-shadow 0.15s, color 0.15s;
 }
-.swap:hover { transform: rotate(180deg); border-color: var(--accent); color: var(--accent); }
+/* rotate only the arrow so the light/shadow pair stays put */
+.swap span { display: inline-block; transition: transform 0.25s; }
+.swap:hover { color: var(--accent); }
+.swap:hover span { transform: rotate(180deg); }
+.swap:active { box-shadow: var(--pressed-sm); }
 
 .ticket__foot {
   position: relative; display: flex; flex-wrap: wrap; gap: 6px 22px;
-  padding-top: 12px; border-top: 1px dashed var(--line);
+  padding-top: 14px; border-top: 1px solid var(--line);
   font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums;
 }
 
@@ -179,7 +194,7 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 .ticket__foot .rate { font-family: var(--font-num); color: var(--ink); font-weight: 600; margin: -2px 0; padding: 2px 4px; }
 .result .copy { margin: 0 -6px; padding: 0 6px; }
 .tile.copy { margin: 0; cursor: copy; }
-.tile[data-copied] { border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, var(--surface)); }
+.tile[data-copied] { border-color: color-mix(in srgb, var(--c) 60%, var(--line)); background: color-mix(in srgb, var(--c) 7%, transparent); }
 .hint.copy-hint { margin: -8px 0 12px; }
 
 .toast {
@@ -202,22 +217,22 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
   font-family: var(--font-display); font-weight: 500; font-size: 16px;
   margin: 0 0 14px; text-wrap: balance;
 }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .tile {
   --c: var(--accent);
   display: grid; gap: 4px; text-align: left; min-width: 0;
-  padding: 14px 16px; border-radius: 12px;
-  background: var(--surface); border: 1px solid var(--line);
-  border-top: 3px solid var(--c);
+  padding: 14px 16px; border-radius: 16px;
+  background: transparent; border: 1px solid var(--line);
+  transition: border-color 0.15s, background 0.15s;
 }
-.tile:hover { border-color: var(--c); }
+.tile:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--line)); }
 .tile__code { font-family: var(--font-num); font-size: 12px; font-weight: 600; color: var(--c); letter-spacing: 0.04em; }
 .tile__value { font-family: var(--font-num); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .tile__name { font-size: 12px; color: var(--muted); }
 .tile--rub { --c: var(--rub); } .tile--usd { --c: var(--usd); } .tile--idr { --c: var(--idr); }
 .tile--btc { --c: var(--btc); } .tile--eth { --c: var(--eth); }
 
-.matrix-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.matrix-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; }
 .matrix { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 660px; }
 .matrix th, .matrix td { padding: 11px 14px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .matrix tbody tr:last-child > * { border-bottom: 0; }
@@ -237,7 +252,8 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 .foot p { margin: 0; }
 
 @media (max-width: 480px) {
-  .ticket { padding: 22px 16px 16px; }
+  .ticket { padding: 22px 16px 16px; border-radius: 22px; }
+  .amount, .result { padding: 10px 14px; }
   h1 { font-size: 24px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -567,7 +583,7 @@ function App() {
           {amount == null && <p className="hint hint--err">Введите число, например 1500 или 0,25</p>}
         </div>
 
-        <button type="button" className="swap" onClick={swap} aria-label="Поменять валюты местами">⇅</button>
+        <button type="button" className="swap" onClick={swap} aria-label="Поменять валюты местами"><span aria-hidden="true">⇅</span></button>
 
         <div className="ticket__row">
           <span className="label" id="to-label">Получаю</span>

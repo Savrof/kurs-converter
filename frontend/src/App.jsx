@@ -248,7 +248,7 @@ export default function App() {
           {amount == null && <p className="hint hint--err">Введите число, например 1500 или 0,25</p>}
         </div>
 
-        <button type="button" className="swap" onClick={swap} aria-label="Поменять валюты местами">⇅</button>
+        <button type="button" className="swap" onClick={swap} aria-label="Поменять валюты местами"><span aria-hidden="true">⇅</span></button>
 
         <div className="ticket__row">
           <span className="label" id="to-label">Получаю</span>
