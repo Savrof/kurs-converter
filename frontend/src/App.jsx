@@ -35,6 +35,46 @@ function fmtRate(value) {
   return value.toLocaleString("ru-RU", { maximumSignificantDigits: 4 });
 }
 
+// Copied text drops the thousands separators so it pastes into calculators and
+// spreadsheets as a number: "9 156 420,5" -> "9156420,5".
+const forClipboard = (text) => String(text).replace(/[\s\u00a0\u202f]/g, "");
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Older browsers and some embedded views refuse the async clipboard API.
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { ok = false; }
+    ta.remove();
+    return ok;
+  }
+}
+
+function Copy({ id, text, copied, onCopy, className = "", children }) {
+  const value = forClipboard(text);
+  return (
+    <button
+      type="button"
+      className={`copy ${className}`}
+      onClick={() => onCopy(id, value)}
+      title="Нажмите, чтобы скопировать"
+      aria-label={`Скопировать ${value}`}
+      data-copied={copied?.id === id && copied.ok ? "" : undefined}
+    >
+      {children ?? text}
+    </button>
+  );
+}
+
 function timeAgo(date, now) {
   const s = Math.max(0, Math.round((now - date) / 1000));
   if (s < 60) return `${s} с назад`;
@@ -122,6 +162,15 @@ export default function App() {
   const [amountText, setAmountText] = useState("0,05");
   const [from, setFrom] = useState("BTC");
   const [to, setTo] = useState("RUB");
+  const [copied, setCopied] = useState(null);
+  const copyTimer = useRef(null);
+
+  const onCopy = useCallback(async (id, text) => {
+    const ok = await copyText(text);
+    setCopied({ id, text, ok });
+    clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(null), 1800);
+  }, []);
 
   const refresh = useCallback(async (force = false) => {
     setLoading(true);
@@ -205,7 +254,7 @@ export default function App() {
           <span className="label" id="to-label">Получаю</span>
           <CurrencyPicker id="to-label" value={to} onChange={pickTo} />
           <output className="result" htmlFor="amount" aria-live="polite">
-            <span className="result__value">{fmt(result, to)}</span>
+            <Copy id="result" text={fmt(result, to)} copied={copied} onCopy={onCopy} className="result__value" />
             <span className="amount__code">{to}</span>
           </output>
           {to === "BTC" && result != null && result < 0.01 && (
@@ -214,8 +263,8 @@ export default function App() {
         </div>
 
         <div className="ticket__foot">
-          <span>1 {from} = <b>{fmtRate(conv(1, from, to))}</b> {to}</span>
-          <span>1 {to} = <b>{fmtRate(conv(1, to, from))}</b> {from}</span>
+          <span>1 {from} = <Copy id="rate-fwd" text={fmtRate(conv(1, from, to))} copied={copied} onCopy={onCopy} className="rate" /> {to}</span>
+          <span>1 {to} = <Copy id="rate-back" text={fmtRate(conv(1, to, from))} copied={copied} onCopy={onCopy} className="rate" /> {from}</span>
         </div>
       </section>
 
@@ -223,14 +272,18 @@ export default function App() {
         <h2 id="all-h" className="section-h">
           {amount != null ? fmt(amount, from) : "—"} {from} во всех валютах
         </h2>
+        <p className="hint copy-hint">Нажмите на любое число, чтобы скопировать его</p>
         <div className="tiles">
-          {others.map((c) => (
-            <button type="button" key={c.code} className={`tile tile--${c.code.toLowerCase()}`} onClick={() => pickTo(c.code)}>
-              <span className="tile__code">{c.sign} {c.code}</span>
-              <span className="tile__value">{amount != null ? fmt(conv(amount, from, c.code), c.code) : "—"}</span>
-              <span className="tile__name">{c.name}</span>
-            </button>
-          ))}
+          {others.map((c) => {
+            const value = amount != null ? fmt(conv(amount, from, c.code), c.code) : "—";
+            return (
+              <Copy key={c.code} id={`tile-${c.code}`} text={value} copied={copied} onCopy={onCopy} className={`tile tile--${c.code.toLowerCase()}`}>
+                <span className="tile__code">{c.sign} {c.code}</span>
+                <span className="tile__value">{value}</span>
+                <span className="tile__name">{c.name}</span>
+              </Copy>
+            );
+          })}
         </div>
       </section>
 
@@ -253,7 +306,9 @@ export default function App() {
                   </th>
                   {CURRENCIES.map((c) => (
                     <td key={c.code} className={r.code === c.code ? "same" : ""}>
-                      {r.code === c.code ? "1" : fmtRate(conv(1, r.code, c.code))}
+                      {r.code === c.code ? "1" : (
+                        <Copy id={`mx-${r.code}-${c.code}`} text={fmtRate(conv(1, r.code, c.code))} copied={copied} onCopy={onCopy} />
+                      )}
                     </td>
                   ))}
                 </tr>
@@ -274,6 +329,10 @@ export default function App() {
           Обновлено {updated ? timeAgo(updated, now) : "—"} · источники: {data?.sources?.join(", ") || "—"} · автообновление раз в минуту
         </p>
       </footer>
+
+      <div className="toast" role="status" aria-live="polite" hidden={!copied}>
+        {copied && (copied.ok ? <>Скопировано: <b>{copied.text}</b></> : "Не получилось скопировать. Выделите число и нажмите Ctrl+C")}
+      </div>
     </div>
   );
 }

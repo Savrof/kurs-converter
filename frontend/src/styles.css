@@ -159,7 +159,32 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
   padding-top: 12px; border-top: 1px dashed var(--line);
   font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums;
 }
-.ticket__foot b { font-family: var(--font-num); color: var(--ink); font-weight: 600; }
+
+/* Click-to-copy numbers. :where() keeps specificity at zero so .tile etc. keep their own box. */
+:where(.copy) {
+  font: inherit; color: inherit; text-align: inherit;
+  background: none; border: 0; margin: -2px -5px; padding: 2px 5px; border-radius: 6px;
+  cursor: copy; transition: background 0.15s;
+}
+.copy:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.copy[data-copied] { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.ticket__foot .rate { font-family: var(--font-num); color: var(--ink); font-weight: 600; margin: -2px 0; padding: 2px 4px; }
+.result .copy { margin: 0 -6px; padding: 0 6px; }
+.tile.copy { margin: 0; cursor: copy; }
+.tile[data-copied] { border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, var(--surface)); }
+.hint.copy-hint { margin: -8px 0 12px; }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100% - 32px);
+  padding: 9px 16px; border-radius: 999px;
+  background: var(--ink); color: var(--surface);
+  font-size: 13px; box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.5);
+  animation: toast-in 0.18s ease-out;
+}
+.toast b { font-family: var(--font-num); }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 
 .hint { margin: 0; font-size: 13px; color: var(--muted); }
 .hint--err { color: var(--down); }
