@@ -10,11 +10,11 @@
 /* Soft UI: the converter is raised out of the page with a light/dark shadow pair,
    its inputs are pressed in. Everything else stays flat with hairline borders. */
 :root {
-  --paper: #eef1f5;
-  --surface: #fafbfc;
+  --paper: #e3e7ed;
+  --surface: #edf0f4;
   --ink: #1d2733;
   --muted: #6a7686;
-  --line: #dfe4eb;
+  --line: #d3d9e1;
   --accent: #0d7a68;
   --accent-ink: #f2fbf7;
   --guilloche: #7d8ea6;
@@ -25,14 +25,15 @@
   --idr: #c23b2e;
   --btc: #d9811a;
   --eth: #5a63c4;
-  --hi: rgba(255, 255, 255, 0.95);
-  --lo: rgba(163, 177, 198, 0.55);
-  --convex-a: #f7f9fb;
-  --convex-b: #e7ebf0;
+  --hi: rgba(255, 255, 255, 0.9);
+  --lo: rgba(150, 164, 186, 0.6);
+  --convex-a: #e9edf2;
+  --convex-b: #dce1e8;
   --font-display: "Unbounded", "Manrope", system-ui, sans-serif;
   --font-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-  --raised: -10px -10px 26px var(--hi), 12px 12px 30px var(--lo);
+  --raised: -14px -14px 32px var(--hi), 14px 14px 32px var(--lo), inset 1px 1px 0 var(--edge);
+  --edge: rgba(255, 255, 255, 0.7);
   --raised-sm: -3px -3px 8px var(--hi), 4px 4px 9px var(--lo);
   --pressed: inset 4px 4px 10px var(--lo), inset -4px -4px 10px var(--hi);
   --pressed-sm: inset 2px 2px 5px var(--lo), inset -2px -2px 5px var(--hi);
@@ -43,7 +44,7 @@
     --accent: #45c4a8; --accent-ink: #08201a; --guilloche: #8a96a8; --up: #4cc47f; --down: #f07a6e;
     --rub: #7aa3f0; --usd: #b6cf6a; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
     --hi: rgba(255, 255, 255, 0.045); --lo: rgba(0, 0, 0, 0.55);
-    --convex-a: #22262c; --convex-b: #17191d;
+    --convex-a: #22262c; --convex-b: #17191d; --edge: rgba(255, 255, 255, 0.05);
     color-scheme: dark;
   }
 }
@@ -52,7 +53,7 @@
   --accent: #45c4a8; --accent-ink: #08201a; --guilloche: #8a96a8; --up: #4cc47f; --down: #f07a6e;
   --rub: #7aa3f0; --usd: #b6cf6a; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
   --hi: rgba(255, 255, 255, 0.045); --lo: rgba(0, 0, 0, 0.55);
-  --convex-a: #22262c; --convex-b: #17191d;
+  --convex-a: #22262c; --convex-b: #17191d; --edge: rgba(255, 255, 255, 0.05);
   color-scheme: dark;
 }
 
