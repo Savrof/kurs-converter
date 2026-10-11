@@ -11,6 +11,57 @@ const CURRENCIES = [
 const BY_CODE = Object.fromEntries(CURRENCIES.map((c) => [c.code, c]));
 const REFRESH_MS = 60_000;
 
+// Icons as inline SVG: font glyphs like ◐ or ☀ fall back to random fonts or emoji.
+const ICON = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", "aria-hidden": true };
+const THEMES = [
+  {
+    id: "system", label: "Как в системе",
+    icon: <svg {...ICON}><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" /></svg>,
+  },
+  {
+    id: "light", label: "Светлая тема",
+    icon: (
+      <svg {...ICON}>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+      </svg>
+    ),
+  },
+  {
+    id: "dark", label: "Тёмная тема",
+    icon: <svg {...ICON}><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" /></svg>,
+  },
+];
+const THEME_KEY = "kurs-theme";
+
+function readTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY) || "system";
+  } catch {
+    return "system";
+  }
+}
+
+function ThemeSwitch({ value, onChange }) {
+  return (
+    <div className="theme-switch" role="radiogroup" aria-label="Тема оформления">
+      {THEMES.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="radio"
+          aria-checked={value === t.id}
+          aria-label={t.label}
+          title={t.label}
+          onClick={() => onChange(t.id)}
+        >
+          {t.icon}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function parseAmount(text) {
   const n = Number(String(text).replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(n) && n >= 0 ? n : null;
@@ -84,7 +135,7 @@ function timeAgo(date, now) {
 }
 
 // Banknote-style guilloche rosette, drawn once per theme change.
-function Guilloche() {
+function Guilloche({ theme }) {
   const ref = useRef(null);
   useEffect(() => {
     const canvas = ref.current;
@@ -112,13 +163,14 @@ function Guilloche() {
         ctx.stroke();
       }
     };
-    draw();
+    // next frame: the parent applies data-theme in its own effect, after this one runs
+    const raf = requestAnimationFrame(draw);
     const ro = new ResizeObserver(draw);
     ro.observe(canvas);
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     mq.addEventListener?.("change", draw);
-    return () => { ro.disconnect(); mq.removeEventListener?.("change", draw); };
-  }, []);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); mq.removeEventListener?.("change", draw); };
+  }, [theme]);
   return <canvas ref={ref} className="guilloche" aria-hidden="true" />;
 }
 
@@ -163,6 +215,20 @@ export default function App() {
   const [from, setFrom] = useState("BTC");
   const [to, setTo] = useState("RUB");
   const [copied, setCopied] = useState(null);
+  const [theme, setTheme] = useState(readTheme);
+  // A host page (e.g. the claude.ai viewer) may already pin a theme; "system" goes back to it.
+  const hostTheme = useRef(document.documentElement.getAttribute("data-theme"));
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const target = theme === "system" ? hostTheme.current : theme;
+    if (target) root.setAttribute("data-theme", target);
+    else root.removeAttribute("data-theme");
+    try {
+      if (theme === "system") localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, theme);
+    } catch { /* storage blocked: the choice lasts for this visit only */ }
+  }, [theme]);
   const copyTimer = useRef(null);
 
   const onCopy = useCallback(async (id, text) => {
@@ -219,6 +285,7 @@ export default function App() {
           </div>
         </div>
         <div className="status">
+          <ThemeSwitch value={theme} onChange={setTheme} />
           <span className={`pill pill--${error && !data ? "err" : data?.mode === "demo" ? "demo" : stale ? "stale" : "live"}`}>
             <span className="pill__dot" />
             {error && !data ? "нет данных" : data?.mode === "demo" ? "демо-курсы" : stale ? "устарело" : "онлайн"}
@@ -230,7 +297,7 @@ export default function App() {
       </header>
 
       <section className="ticket" aria-label="Конвертер">
-        <Guilloche />
+        <Guilloche theme={theme} />
         <div className="ticket__row">
           <label className="label" id="from-label" htmlFor="amount">Отдаю</label>
           <CurrencyPicker id="from-label" value={from} onChange={pickFrom} />

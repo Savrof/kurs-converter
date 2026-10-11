@@ -34,20 +34,20 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #151d1b; --surface: #19221f; --ink: #e2ede8; --muted: #8fa9a1; --line: #253330;
-    --accent: #3fbfa3; --accent-ink: #062019; --guilloche: #3fbfa3; --up: #4cc47f; --down: #f07a6e;
+    --paper: #1b1e23; --surface: #202429; --ink: #e7eaee; --muted: #9aa3ae; --line: #2d3239;
+    --accent: #45c4a8; --accent-ink: #08201a; --guilloche: #8a96a8; --up: #4cc47f; --down: #f07a6e;
     --rub: #7aa3f0; --usd: #b6cf6a; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
-    --hi: rgba(255, 255, 255, 0.05); --lo: rgba(0, 0, 0, 0.6);
-    --convex-a: #19231f; --convex-b: #111815;
+    --hi: rgba(255, 255, 255, 0.045); --lo: rgba(0, 0, 0, 0.55);
+    --convex-a: #22262c; --convex-b: #17191d;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --paper: #151d1b; --surface: #19221f; --ink: #e2ede8; --muted: #8fa9a1; --line: #253330;
-  --accent: #3fbfa3; --accent-ink: #062019; --guilloche: #3fbfa3; --up: #4cc47f; --down: #f07a6e;
+  --paper: #1b1e23; --surface: #202429; --ink: #e7eaee; --muted: #9aa3ae; --line: #2d3239;
+  --accent: #45c4a8; --accent-ink: #08201a; --guilloche: #8a96a8; --up: #4cc47f; --down: #f07a6e;
   --rub: #7aa3f0; --usd: #b6cf6a; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
-  --hi: rgba(255, 255, 255, 0.05); --lo: rgba(0, 0, 0, 0.6);
-  --convex-a: #19231f; --convex-b: #111815;
+  --hi: rgba(255, 255, 255, 0.045); --lo: rgba(0, 0, 0, 0.55);
+  --convex-a: #22262c; --convex-b: #17191d;
   color-scheme: dark;
 }
 
@@ -97,6 +97,19 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 .pill--demo, .pill--stale { color: var(--btc); }
 .pill--err { color: var(--down); }
 @keyframes pulse { 50% { opacity: 0.3; } }
+
+.theme-switch {
+  display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px;
+  background: var(--paper); box-shadow: var(--pressed-sm);
+}
+.theme-switch button {
+  width: 30px; height: 30px; border: 0; border-radius: 50%;
+  display: grid; place-items: center; padding: 0;
+  background: transparent; color: var(--muted);
+  transition: box-shadow 0.15s, color 0.15s;
+}
+.theme-switch button:hover { color: var(--ink); }
+.theme-switch button[aria-checked="true"] { background: var(--paper); color: var(--accent); box-shadow: var(--raised-sm); }
 
 .btn-ghost {
   padding: 8px 16px; border-radius: 12px; font-size: 14px; font-weight: 600;
@@ -339,6 +352,57 @@ const CURRENCIES = [
 const BY_CODE = Object.fromEntries(CURRENCIES.map((c) => [c.code, c]));
 const REFRESH_MS = 60_000;
 
+// Icons as inline SVG: font glyphs like ◐ or ☀ fall back to random fonts or emoji.
+const ICON = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", "aria-hidden": true };
+const THEMES = [
+  {
+    id: "system", label: "Как в системе",
+    icon: <svg {...ICON}><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" /></svg>,
+  },
+  {
+    id: "light", label: "Светлая тема",
+    icon: (
+      <svg {...ICON}>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+      </svg>
+    ),
+  },
+  {
+    id: "dark", label: "Тёмная тема",
+    icon: <svg {...ICON}><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" /></svg>,
+  },
+];
+const THEME_KEY = "kurs-theme";
+
+function readTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY) || "system";
+  } catch {
+    return "system";
+  }
+}
+
+function ThemeSwitch({ value, onChange }) {
+  return (
+    <div className="theme-switch" role="radiogroup" aria-label="Тема оформления">
+      {THEMES.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="radio"
+          aria-checked={value === t.id}
+          aria-label={t.label}
+          title={t.label}
+          onClick={() => onChange(t.id)}
+        >
+          {t.icon}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function parseAmount(text) {
   const n = Number(String(text).replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(n) && n >= 0 ? n : null;
@@ -412,7 +476,7 @@ function timeAgo(date, now) {
 }
 
 // Banknote-style guilloche rosette, drawn once per theme change.
-function Guilloche() {
+function Guilloche({ theme }) {
   const ref = useRef(null);
   useEffect(() => {
     const canvas = ref.current;
@@ -440,13 +504,14 @@ function Guilloche() {
         ctx.stroke();
       }
     };
-    draw();
+    // next frame: the parent applies data-theme in its own effect, after this one runs
+    const raf = requestAnimationFrame(draw);
     const ro = new ResizeObserver(draw);
     ro.observe(canvas);
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     mq.addEventListener?.("change", draw);
-    return () => { ro.disconnect(); mq.removeEventListener?.("change", draw); };
-  }, []);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); mq.removeEventListener?.("change", draw); };
+  }, [theme]);
   return <canvas ref={ref} className="guilloche" aria-hidden="true" />;
 }
 
@@ -491,6 +556,20 @@ function App() {
   const [from, setFrom] = useState("BTC");
   const [to, setTo] = useState("RUB");
   const [copied, setCopied] = useState(null);
+  const [theme, setTheme] = useState(readTheme);
+  // A host page (e.g. the claude.ai viewer) may already pin a theme; "system" goes back to it.
+  const hostTheme = useRef(document.documentElement.getAttribute("data-theme"));
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const target = theme === "system" ? hostTheme.current : theme;
+    if (target) root.setAttribute("data-theme", target);
+    else root.removeAttribute("data-theme");
+    try {
+      if (theme === "system") localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, theme);
+    } catch { /* storage blocked: the choice lasts for this visit only */ }
+  }, [theme]);
   const copyTimer = useRef(null);
 
   const onCopy = useCallback(async (id, text) => {
@@ -547,6 +626,7 @@ function App() {
           </div>
         </div>
         <div className="status">
+          <ThemeSwitch value={theme} onChange={setTheme} />
           <span className={`pill pill--${error && !data ? "err" : data?.mode === "demo" ? "demo" : stale ? "stale" : "live"}`}>
             <span className="pill__dot" />
             {error && !data ? "нет данных" : data?.mode === "demo" ? "демо-курсы" : stale ? "устарело" : "онлайн"}
@@ -558,7 +638,7 @@ function App() {
       </header>
 
       <section className="ticket" aria-label="Конвертер">
-        <Guilloche />
+        <Guilloche theme={theme} />
         <div className="ticket__row">
           <label className="label" id="from-label" htmlFor="amount">Отдаю</label>
           <CurrencyPicker id="from-label" value={from} onChange={pickFrom} />

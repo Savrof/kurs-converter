@@ -31,20 +31,20 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #151d1b; --surface: #19221f; --ink: #e2ede8; --muted: #8fa9a1; --line: #253330;
-    --accent: #3fbfa3; --accent-ink: #062019; --guilloche: #3fbfa3; --up: #4cc47f; --down: #f07a6e;
+    --paper: #1b1e23; --surface: #202429; --ink: #e7eaee; --muted: #9aa3ae; --line: #2d3239;
+    --accent: #45c4a8; --accent-ink: #08201a; --guilloche: #8a96a8; --up: #4cc47f; --down: #f07a6e;
     --rub: #7aa3f0; --usd: #b6cf6a; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
-    --hi: rgba(255, 255, 255, 0.05); --lo: rgba(0, 0, 0, 0.6);
-    --convex-a: #19231f; --convex-b: #111815;
+    --hi: rgba(255, 255, 255, 0.045); --lo: rgba(0, 0, 0, 0.55);
+    --convex-a: #22262c; --convex-b: #17191d;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --paper: #151d1b; --surface: #19221f; --ink: #e2ede8; --muted: #8fa9a1; --line: #253330;
-  --accent: #3fbfa3; --accent-ink: #062019; --guilloche: #3fbfa3; --up: #4cc47f; --down: #f07a6e;
+  --paper: #1b1e23; --surface: #202429; --ink: #e7eaee; --muted: #9aa3ae; --line: #2d3239;
+  --accent: #45c4a8; --accent-ink: #08201a; --guilloche: #8a96a8; --up: #4cc47f; --down: #f07a6e;
   --rub: #7aa3f0; --usd: #b6cf6a; --idr: #f07e6f; --btc: #f3a849; --eth: #9aa2f5;
-  --hi: rgba(255, 255, 255, 0.05); --lo: rgba(0, 0, 0, 0.6);
-  --convex-a: #19231f; --convex-b: #111815;
+  --hi: rgba(255, 255, 255, 0.045); --lo: rgba(0, 0, 0, 0.55);
+  --convex-a: #22262c; --convex-b: #17191d;
   color-scheme: dark;
 }
 
@@ -94,6 +94,19 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 .pill--demo, .pill--stale { color: var(--btc); }
 .pill--err { color: var(--down); }
 @keyframes pulse { 50% { opacity: 0.3; } }
+
+.theme-switch {
+  display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px;
+  background: var(--paper); box-shadow: var(--pressed-sm);
+}
+.theme-switch button {
+  width: 30px; height: 30px; border: 0; border-radius: 50%;
+  display: grid; place-items: center; padding: 0;
+  background: transparent; color: var(--muted);
+  transition: box-shadow 0.15s, color 0.15s;
+}
+.theme-switch button:hover { color: var(--ink); }
+.theme-switch button[aria-checked="true"] { background: var(--paper); color: var(--accent); box-shadow: var(--raised-sm); }
 
 .btn-ghost {
   padding: 8px 16px; border-radius: 12px; font-size: 14px; font-weight: 600;
