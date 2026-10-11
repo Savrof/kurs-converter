@@ -322,11 +322,14 @@ export default function App() {
           <CurrencyPicker id="to-label" value={to} onChange={pickTo} />
           <output className="result" htmlFor="amount" aria-live="polite">
             <Copy id="result" text={fmt(result, to)} copied={copied} onCopy={onCopy} className="result__value" />
-            <span className="amount__code">{to}</span>
+            {/* sats sit under the code inside the field, so the card height never changes */}
+            <span className="result__side">
+              <span className="amount__code">{to}</span>
+              {to === "BTC" && result != null && result < 0.01 && (
+                <span className="result__sats">≈ {Math.round(result * 1e8).toLocaleString("ru-RU")} sat</span>
+              )}
+            </span>
           </output>
-          {to === "BTC" && result != null && result < 0.01 && (
-            <p className="hint">≈ {Math.round(result * 1e8).toLocaleString("ru-RU")} sat</p>
-          )}
         </div>
 
         <div className="ticket__foot">

@@ -176,6 +176,13 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
   font-family: var(--font-num); font-size: clamp(26px, 6vw, 38px); font-weight: 600;
   font-variant-numeric: tabular-nums; color: var(--accent);
 }
+/* code + optional sats stacked; shorter than the number's line box, so the field keeps its height */
+.result { align-items: center; }
+.result__side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; line-height: 1.1; }
+.result__sats {
+  font-family: var(--font-num); font-size: 11px; color: var(--muted);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
 .amount__code { font-family: var(--font-display); font-size: 14px; font-weight: 500; color: var(--muted); }
 
 .swap {
@@ -671,11 +678,14 @@ function App() {
           <CurrencyPicker id="to-label" value={to} onChange={pickTo} />
           <output className="result" htmlFor="amount" aria-live="polite">
             <Copy id="result" text={fmt(result, to)} copied={copied} onCopy={onCopy} className="result__value" />
-            <span className="amount__code">{to}</span>
+            {/* sats sit under the code inside the field, so the card height never changes */}
+            <span className="result__side">
+              <span className="amount__code">{to}</span>
+              {to === "BTC" && result != null && result < 0.01 && (
+                <span className="result__sats">≈ {Math.round(result * 1e8).toLocaleString("ru-RU")} sat</span>
+              )}
+            </span>
           </output>
-          {to === "BTC" && result != null && result < 0.01 && (
-            <p className="hint">≈ {Math.round(result * 1e8).toLocaleString("ru-RU")} sat</p>
-          )}
         </div>
 
         <div className="ticket__foot">
