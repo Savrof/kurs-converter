@@ -5,11 +5,15 @@
 
 ## Источники курсов
 
-| Что | Источник | Ключ API |
-|---|---|---|
-| RUB, IDR к USD | [open.er-api.com](https://www.exchangerate-api.com/docs/free) | не нужен |
-| BTC, ETH к USD + изменение за 24 ч | [CoinGecko](https://www.coingecko.com/en/api) `/simple/price` | не нужен |
-| Запасной для всех валют | [fawazahmed0/currency-api](https://github.com/fawazahmed0/exchange-api) через jsDelivr | не нужен |
+Основной источник: Coinbase, у него же берёт курсы криптовалют конвертер Google. Один запрос возвращает и фиат, и крипту, курсы обновляются в течение дня. Остальные источники подставляются, только если Coinbase не ответил или не вернул какую-то валюту.
+
+| Порядок | Что | Источник | Ключ API |
+|---|---|---|---|
+| 1 | Все валюты | [Coinbase](https://docs.cdp.coinbase.com/coinbase-app/docs/api-exchange-rates) `/v2/exchange-rates` | не нужен |
+| 1 | Изменение BTC и ETH за 24 ч | Coinbase Exchange `/products/{BTC,ETH}-USD/stats` | не нужен |
+| 2 | RUB, IDR | [open.er-api.com](https://www.exchangerate-api.com/docs/free) (обновляется раз в сутки) | не нужен |
+| 2 | BTC, ETH | [CoinGecko](https://www.coingecko.com/en/api) `/simple/price` | не нужен |
+| 3 | Все валюты | [fawazahmed0/currency-api](https://github.com/fawazahmed0/exchange-api) через jsDelivr | не нужен |
 
 Все курсы хранятся как «единиц валюты за 1 USD», поэтому любая пара считается через доллар.
 Кэш живёт 60 секунд (`RATES_TTL`). Если провайдер упал, отдаются последние полученные данные.
