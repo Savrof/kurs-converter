@@ -45,13 +45,17 @@ async def convert_endpoint(
         if code not in CURRENCIES:
             raise HTTPException(400, f"Unsupported currency {code}. Use one of {', '.join(CURRENCIES)}")
     snap = await service.get()
+    as_of = {c: (snap.meta[c].as_of.isoformat() if snap.meta[c].as_of else None)
+             for c in (src, dst) if c in snap.meta}
     return {
         "from": src,
         "to": dst,
         "amount": amount,
         "result": convert(snap.rates, amount, src, dst),
         "rate": convert(snap.rates, 1, src, dst),
-        "updated_at": snap.updated_at.isoformat(),
+        # when each side's rate was produced by its provider; null when unstated
+        "as_of": as_of,
+        "fetched_at": snap.fetched_at.isoformat(),
     }
 
 

@@ -126,6 +126,22 @@ function Copy({ id, text, copied, onCopy, className = "", children }) {
   );
 }
 
+// Freshness is judged by each provider's own timestamp, never by when we fetched.
+const FRESH_MS = 15 * 60_000;
+const DAY_MS = 36 * 3600_000;
+
+function freshness(data, now) {
+  if (!data) return { kind: "err", text: "нет данных" };
+  if (data.mode === "demo") return { kind: "demo", text: "демо-курсы" };
+  const used = Object.values(data.meta || {});
+  if (!used.length) return { kind: "unknown", text: "возраст неизвестен" };
+  if (used.some((m) => !m.asOf)) return { kind: "unknown", text: "возраст неизвестен" };
+  const oldest = Math.max(...used.map((m) => now - new Date(m.asOf)));
+  if (oldest < FRESH_MS) return { kind: "live", text: "онлайн" };
+  if (oldest < DAY_MS) return { kind: "day", text: "курс дня" };
+  return { kind: "stale", text: "устарело" };
+}
+
 function timeAgo(date, now) {
   const s = Math.max(0, Math.round((now - date) / 1000));
   if (s < 60) return `${s} с назад`;
@@ -261,8 +277,9 @@ export default function App() {
   const amount = parseAmount(amountText);
   const conv = useCallback((v, a, b) => (rates ? (v * rates[b]) / rates[a] : null), [rates]);
   const result = amount != null ? conv(amount, from, to) : null;
-  const updated = data ? new Date(data.updated_at) : null;
-  const stale = updated && now - updated > 10 * 60_000;
+  const fresh = error && !data ? { kind: "err", text: "нет данных" } : freshness(data, now);
+  const fetched = data ? new Date(data.fetched_at) : null;
+  const cbr = data?.official?.RUB;
 
   const pickFrom = (c) => { if (c === to) setTo(from); setFrom(c); };
   const pickTo = (c) => { if (c === from) setFrom(to); setTo(c); };
@@ -286,9 +303,9 @@ export default function App() {
         </div>
         <div className="status">
           <ThemeSwitch value={theme} onChange={setTheme} />
-          <span className={`pill pill--${error && !data ? "err" : data?.mode === "demo" ? "demo" : stale ? "stale" : "live"}`}>
+          <span className={`pill pill--${fresh.kind}`} title="Свежесть по метке времени самого источника">
             <span className="pill__dot" />
-            {error && !data ? "нет данных" : data?.mode === "demo" ? "демо-курсы" : stale ? "устарело" : "онлайн"}
+            {fresh.text}
           </span>
           <button type="button" className="btn-ghost" onClick={() => refresh(true)} disabled={loading} id="refresh">
             {loading ? "Обновляю…" : "Обновить"}
@@ -335,6 +352,12 @@ export default function App() {
         <div className="ticket__foot">
           <span>1 {from} = <Copy id="rate-fwd" text={fmtRate(conv(1, from, to))} copied={copied} onCopy={onCopy} className="rate" /> {to}</span>
           <span>1 {to} = <Copy id="rate-back" text={fmtRate(conv(1, to, from))} copied={copied} onCopy={onCopy} className="rate" /> {from}</span>
+          {(from === "RUB" || to === "RUB") && cbr && (
+            <span className="foot-official">
+              Офиц. курс ЦБ РФ{cbr.asOf ? ` на ${new Date(cbr.asOf).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}` : ""}:
+              {" "}1 USD = <Copy id="cbr" text={fmtRate(cbr.rate)} copied={copied} onCopy={onCopy} className="rate" /> ₽
+            </span>
+          )}
         </div>
       </section>
 
@@ -395,8 +418,32 @@ export default function App() {
             Живые API недоступны в этом окне, поэтому показаны примерные курсы. В полной версии курсы приходят с бэкенда на Python.
           </p>
         )}
+        {data?.mode === "live" && (
+          <ul className="srcs">
+            {CURRENCIES.filter((c) => c.code !== "USD").map((c) => {
+              const m = data.meta?.[c.code];
+              return (
+                <li key={c.code}>
+                  <b>{c.code}</b>
+                  <span>{m ? m.src : "—"}</span>
+                  <span className={m && !m.asOf ? "srcs__warn" : undefined}>
+                    {m ? (m.asOf ? timeAgo(new Date(m.asOf), now) : "без метки времени") : "—"}
+                  </span>
+                </li>
+              );
+            })}
+            {cbr && (
+              <li>
+                <b>RUB</b>
+                <span>ЦБ РФ (официальный)</span>
+                <span>{cbr.asOf ? new Date(cbr.asOf).toLocaleDateString("ru-RU", { day: "numeric", month: "long" }) : "—"}</span>
+              </li>
+            )}
+          </ul>
+        )}
         <p>
-          Обновлено {updated ? timeAgo(updated, now) : "—"} · источники: {data?.sources?.join(", ") || "—"} · автообновление раз в минуту
+          Запрошено {fetched ? timeAgo(fetched, now) : "—"} · автообновление раз в минуту.
+          Это справочные курсы: для крупной суммы цену назначает банк или биржа, а не справочник.
         </p>
       </footer>
 

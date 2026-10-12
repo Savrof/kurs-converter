@@ -100,7 +100,7 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 .pill__dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .pill--live { color: var(--up); }
 .pill--live .pill__dot { animation: pulse 2s ease-in-out infinite; }
-.pill--demo, .pill--stale { color: var(--btc); }
+.pill--demo, .pill--stale, .pill--day, .pill--unknown { color: var(--btc); }
 .pill--err { color: var(--down); }
 @keyframes pulse { 50% { opacity: 0.3; } }
 
@@ -271,6 +271,11 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 
 .foot { display: grid; gap: 6px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
 .foot p { margin: 0; }
+.foot-official { color: var(--muted); }
+.srcs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.srcs li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.srcs b { font-family: var(--font-num); font-size: 11px; min-width: 34px; color: var(--ink); }
+.srcs__warn { color: var(--btc); }
 
 @media (max-width: 480px) {
   .ticket { padding: 22px 16px 16px; border-radius: 22px; }
@@ -290,19 +295,40 @@ h1 { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-h
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script type="text/babel" data-presets="react">
 const { useEffect, useMemo, useRef, useState, useCallback } = React;
-// Data source for the single-file build (GitHub Pages and the artifact demo):
-// no backend, so the browser asks the public APIs directly, in the same order
-// as backend/app/rates.py. Sample rates are the last resort.
-const DEMO_RATES = { USD: 1, RUB: 82.4, IDR: 16480, BTC: 1 / 112500, ETH: 1 / 4150 };
+// Data source for the single-file build (GitHub Pages and the artifact demo).
+// No backend here, so the browser asks the public APIs directly.
+//
+// Rule of this file: a timestamp is never invented. Every rate carries the
+// provider's own "as of" time, or null when the provider states none, and the
+// UI reports that honestly instead of showing the moment we made the request.
+
 const CODES = ["RUB", "IDR", "BTC", "ETH"];
+const DEMO_RATES = { USD: 1, RUB: 82.4, IDR: 16480, BTC: 1 / 112500, ETH: 1 / 4150 };
 
-const getJSON = (url) =>
-  fetch(url).then((r) => {
+const getJSON = async (url, ms = 7000) => {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ac.signal });
     if (!r.ok) throw new Error(`${new URL(url).host} ${r.status}`);
-    return r.json();
-  });
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
+};
 
-async function coinbaseChange() {
+// Coinbase Exchange: last traded price plus the exchange's own timestamp.
+async function cryptoFromCoinbase() {
+  const one = async (code) => {
+    const t = await getJSON(`https://api.exchange.coinbase.com/products/${code}-USD/ticker`);
+    const price = Number(t.price);
+    if (!price) throw new Error(`${code}: no price`);
+    return [code, { perUsd: 1 / price, asOf: t.time || null, src: "Coinbase Exchange" }];
+  };
+  return Object.fromEntries(await Promise.all(["BTC", "ETH"].map(one)));
+}
+
+async function changeFromCoinbase() {
   const one = async (code) => {
     const s = await getJSON(`https://api.exchange.coinbase.com/products/${code}-USD/stats`);
     return [code, ((s.last - s.open) / s.open) * 100];
@@ -310,50 +336,111 @@ async function coinbaseChange() {
   return Object.fromEntries(await Promise.all(["BTC", "ETH"].map(one)));
 }
 
+// Coinbase's reference table covers fiat, but carries no timestamp of its own and
+// has been seen ~1% off the market, so it is only a fallback for RUB/IDR.
+async function fiatFromCoinbase() {
+  const d = await getJSON("https://api.coinbase.com/v2/exchange-rates?currency=USD");
+  const out = {};
+  for (const c of ["RUB", "IDR"]) {
+    const v = Number(d.data.rates[c]);
+    if (v) out[c] = { perUsd: v, asOf: null, src: "Coinbase" };
+  }
+  return out;
+}
+
+// ExchangeRate-API: a once-a-day fixing that does state when it was made.
+async function fromErApi() {
+  const d = await getJSON("https://open.er-api.com/v6/latest/USD");
+  if (d.result !== "success") throw new Error(`er-api: ${d["error-type"]}`);
+  const asOf = d.time_last_update_unix ? new Date(d.time_last_update_unix * 1000).toISOString() : null;
+  const out = {};
+  for (const c of ["RUB", "IDR"]) {
+    if (d.rates[c]) out[c] = { perUsd: d.rates[c], asOf, src: "open.er-api.com" };
+  }
+  return out;
+}
+
+async function fromCoinGecko() {
+  const d = await getJSON(
+    "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true&include_last_updated_at=true"
+  );
+  const rates = {};
+  const change = {};
+  for (const [code, id] of [["BTC", "bitcoin"], ["ETH", "ethereum"]]) {
+    rates[code] = {
+      perUsd: 1 / d[id].usd,
+      asOf: d[id].last_updated_at ? new Date(d[id].last_updated_at * 1000).toISOString() : null,
+      src: "CoinGecko",
+    };
+    if (d[id].usd_24h_change != null) change[code] = d[id].usd_24h_change;
+  }
+  return { rates, change };
+}
+
+// Bank of Russia official rate: the legal reference rate, published once a day.
+async function officialRub() {
+  const d = await getJSON("https://www.cbr-xml-daily.ru/daily_json.js");
+  const v = d.Valute?.USD;
+  if (!v?.Value) throw new Error("cbr: no USD");
+  return { rate: v.Value, prev: v.Previous ?? null, asOf: d.Date || null, src: "ЦБ РФ" };
+}
+
 async function loadRates() {
   const rates = { USD: 1 };
+  const meta = {};
+  const official = {};
   let change = {};
-  const sources = [];
 
-  const [cb, cbChange] = await Promise.allSettled([
-    getJSON("https://api.coinbase.com/v2/exchange-rates?currency=USD"),
-    coinbaseChange(),
-  ]);
-  if (cb.status === "fulfilled") {
-    for (const c of CODES) if (cb.value.data.rates[c]) rates[c] = Number(cb.value.data.rates[c]);
-    sources.push("coinbase.com");
-  }
-  if (cbChange.status === "fulfilled") change = cbChange.value;
-
+  const take = (got) => {
+    for (const [code, v] of Object.entries(got)) {
+      if (!(code in rates)) {
+        rates[code] = v.perUsd;
+        meta[code] = { src: v.src, asOf: v.asOf };
+      }
+    }
+  };
   const missing = () => CODES.filter((c) => !(c in rates));
+
+  const [crypto, fiat, cbr, stats] = await Promise.allSettled([
+    cryptoFromCoinbase(),
+    fromErApi(),
+    officialRub(),
+    changeFromCoinbase(),
+  ]);
+  if (crypto.status === "fulfilled") take(crypto.value);
+  if (fiat.status === "fulfilled") take(fiat.value);
+  if (stats.status === "fulfilled") change = stats.value;
+  if (cbr.status === "fulfilled") official.RUB = cbr.value;
 
   if (missing().some((c) => c === "RUB" || c === "IDR")) {
     try {
-      const fx = await getJSON("https://open.er-api.com/v6/latest/USD");
-      for (const c of ["RUB", "IDR"]) if (!(c in rates)) rates[c] = fx.rates[c];
-      sources.push("open.er-api.com");
+      take(await fiatFromCoinbase());
     } catch { /* next fallback */ }
   }
   if (missing().some((c) => c === "BTC" || c === "ETH") || !Object.keys(change).length) {
     try {
-      const cg = await getJSON("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true");
-      if (!("BTC" in rates)) rates.BTC = 1 / cg.bitcoin.usd;
-      if (!("ETH" in rates)) rates.ETH = 1 / cg.ethereum.usd;
-      if (!Object.keys(change).length) change = { BTC: cg.bitcoin.usd_24h_change, ETH: cg.ethereum.usd_24h_change };
-      sources.push("coingecko.com");
+      const cg = await fromCoinGecko();
+      take(cg.rates);
+      if (!Object.keys(change).length) change = cg.change;
     } catch { /* next fallback */ }
+  }
+  // Nothing else answered for the rouble: the official rate can stand in, labelled as such.
+  if (!("RUB" in rates) && official.RUB) {
+    rates.RUB = official.RUB.rate;
+    meta.RUB = { src: "ЦБ РФ (официальный)", asOf: official.RUB.asOf };
   }
 
   if (missing().length) {
     return {
       mode: "demo",
       rates: DEMO_RATES,
+      meta: {},
+      official,
       change_24h: { BTC: 1.84, ETH: -0.62 },
-      updated_at: new Date().toISOString(),
-      sources: ["примерные значения"],
+      fetched_at: new Date().toISOString(),
     };
   }
-  return { mode: "live", rates, change_24h: change, updated_at: new Date().toISOString(), sources };
+  return { mode: "live", rates, meta, official, change_24h: change, fetched_at: new Date().toISOString() };
 }
 
 
@@ -480,6 +567,22 @@ function Copy({ id, text, copied, onCopy, className = "", children }) {
       {children ?? text}
     </button>
   );
+}
+
+// Freshness is judged by each provider's own timestamp, never by when we fetched.
+const FRESH_MS = 15 * 60_000;
+const DAY_MS = 36 * 3600_000;
+
+function freshness(data, now) {
+  if (!data) return { kind: "err", text: "нет данных" };
+  if (data.mode === "demo") return { kind: "demo", text: "демо-курсы" };
+  const used = Object.values(data.meta || {});
+  if (!used.length) return { kind: "unknown", text: "возраст неизвестен" };
+  if (used.some((m) => !m.asOf)) return { kind: "unknown", text: "возраст неизвестен" };
+  const oldest = Math.max(...used.map((m) => now - new Date(m.asOf)));
+  if (oldest < FRESH_MS) return { kind: "live", text: "онлайн" };
+  if (oldest < DAY_MS) return { kind: "day", text: "курс дня" };
+  return { kind: "stale", text: "устарело" };
 }
 
 function timeAgo(date, now) {
@@ -617,8 +720,9 @@ function App() {
   const amount = parseAmount(amountText);
   const conv = useCallback((v, a, b) => (rates ? (v * rates[b]) / rates[a] : null), [rates]);
   const result = amount != null ? conv(amount, from, to) : null;
-  const updated = data ? new Date(data.updated_at) : null;
-  const stale = updated && now - updated > 10 * 60_000;
+  const fresh = error && !data ? { kind: "err", text: "нет данных" } : freshness(data, now);
+  const fetched = data ? new Date(data.fetched_at) : null;
+  const cbr = data?.official?.RUB;
 
   const pickFrom = (c) => { if (c === to) setTo(from); setFrom(c); };
   const pickTo = (c) => { if (c === from) setFrom(to); setTo(c); };
@@ -642,9 +746,9 @@ function App() {
         </div>
         <div className="status">
           <ThemeSwitch value={theme} onChange={setTheme} />
-          <span className={`pill pill--${error && !data ? "err" : data?.mode === "demo" ? "demo" : stale ? "stale" : "live"}`}>
+          <span className={`pill pill--${fresh.kind}`} title="Свежесть по метке времени самого источника">
             <span className="pill__dot" />
-            {error && !data ? "нет данных" : data?.mode === "demo" ? "демо-курсы" : stale ? "устарело" : "онлайн"}
+            {fresh.text}
           </span>
           <button type="button" className="btn-ghost" onClick={() => refresh(true)} disabled={loading} id="refresh">
             {loading ? "Обновляю…" : "Обновить"}
@@ -691,6 +795,12 @@ function App() {
         <div className="ticket__foot">
           <span>1 {from} = <Copy id="rate-fwd" text={fmtRate(conv(1, from, to))} copied={copied} onCopy={onCopy} className="rate" /> {to}</span>
           <span>1 {to} = <Copy id="rate-back" text={fmtRate(conv(1, to, from))} copied={copied} onCopy={onCopy} className="rate" /> {from}</span>
+          {(from === "RUB" || to === "RUB") && cbr && (
+            <span className="foot-official">
+              Офиц. курс ЦБ РФ{cbr.asOf ? ` на ${new Date(cbr.asOf).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}` : ""}:
+              {" "}1 USD = <Copy id="cbr" text={fmtRate(cbr.rate)} copied={copied} onCopy={onCopy} className="rate" /> ₽
+            </span>
+          )}
         </div>
       </section>
 
@@ -751,8 +861,32 @@ function App() {
             Живые API недоступны в этом окне, поэтому показаны примерные курсы. В полной версии курсы приходят с бэкенда на Python.
           </p>
         )}
+        {data?.mode === "live" && (
+          <ul className="srcs">
+            {CURRENCIES.filter((c) => c.code !== "USD").map((c) => {
+              const m = data.meta?.[c.code];
+              return (
+                <li key={c.code}>
+                  <b>{c.code}</b>
+                  <span>{m ? m.src : "—"}</span>
+                  <span className={m && !m.asOf ? "srcs__warn" : undefined}>
+                    {m ? (m.asOf ? timeAgo(new Date(m.asOf), now) : "без метки времени") : "—"}
+                  </span>
+                </li>
+              );
+            })}
+            {cbr && (
+              <li>
+                <b>RUB</b>
+                <span>ЦБ РФ (официальный)</span>
+                <span>{cbr.asOf ? new Date(cbr.asOf).toLocaleDateString("ru-RU", { day: "numeric", month: "long" }) : "—"}</span>
+              </li>
+            )}
+          </ul>
+        )}
         <p>
-          Обновлено {updated ? timeAgo(updated, now) : "—"} · источники: {data?.sources?.join(", ") || "—"} · автообновление раз в минуту
+          Запрошено {fetched ? timeAgo(fetched, now) : "—"} · автообновление раз в минуту.
+          Это справочные курсы: для крупной суммы цену назначает банк или биржа, а не справочник.
         </p>
       </footer>
 

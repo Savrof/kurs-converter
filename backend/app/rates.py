@@ -3,9 +3,14 @@
 All rates are expressed as "units of currency per 1 USD", so any pair can be
 converted through USD: amount * rates[to] / rates[from].
 
-Primary source is Coinbase, the provider Google's converter cites for crypto.
-Its public exchange-rates endpoint covers fiat and crypto in one call and
-updates intraday. The other providers only fill in what Coinbase did not return.
+Rule of this module: a timestamp is never invented. Every rate carries the
+provider's own "as of" time, or None when the provider states none, so the API
+can report freshness honestly instead of echoing the time of our own request.
+
+Source order mirrors demo/api.demo.js:
+  crypto  Coinbase Exchange ticker (live trade + its timestamp) -> CoinGecko
+  fiat    open.er-api.com (daily fixing, but dated) -> Coinbase table (undated)
+  RUB     additionally the Bank of Russia official rate, reported separately
 """
 
 from __future__ import annotations
@@ -24,42 +29,62 @@ CURRENCIES = ("RUB", "USD", "IDR", "BTC", "ETH")
 FIAT = ("RUB", "IDR")
 CRYPTO = {"BTC": "bitcoin", "ETH": "ethereum"}
 
-COINBASE_RATES_URL = "https://api.coinbase.com/v2/exchange-rates"
-COINBASE_STATS_URL = "https://api.exchange.coinbase.com/products/{}-USD/stats"
-COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price"
-# Free tier updates once a day and asks for attribution; fallback only.
+CB_TICKER_URL = "https://api.exchange.coinbase.com/products/{}-USD/ticker"
+CB_STATS_URL = "https://api.exchange.coinbase.com/products/{}-USD/stats"
+CB_TABLE_URL = "https://api.coinbase.com/v2/exchange-rates"
 ER_API_URL = "https://open.er-api.com/v6/latest/USD"
-# Free, no key, served from jsDelivr; covers both fiat and crypto. Last resort.
-FAWAZ_URL = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json"
+COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price"
+CBR_URL = "https://www.cbr-xml-daily.ru/daily_json.js"
+
+
+@dataclass
+class Quote:
+    per_usd: float
+    source: str
+    as_of: datetime | None = None
 
 
 @dataclass
 class RateSnapshot:
     rates: dict[str, float]            # units per 1 USD, includes "USD": 1.0
+    meta: dict[str, Quote]             # which source each rate came from, and when
     change_24h: dict[str, float]       # % change of the USD price, crypto only
-    updated_at: datetime
-    sources: list[str] = field(default_factory=list)
+    fetched_at: datetime               # when WE asked; not a statement about the data
+    official: dict[str, dict] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
             "base": "USD",
             "rates": self.rates,
+            "meta": {
+                c: {"source": q.source, "as_of": q.as_of.isoformat() if q.as_of else None}
+                for c, q in self.meta.items()
+            },
             "change_24h": self.change_24h,
-            "updated_at": self.updated_at.isoformat(),
-            "sources": self.sources,
+            "official": self.official,
+            "fetched_at": self.fetched_at.isoformat(),
         }
 
 
-async def fetch_coinbase(client: httpx.AsyncClient) -> dict[str, float]:
-    r = await client.get(COINBASE_RATES_URL, params={"currency": "USD"})
-    r.raise_for_status()
-    raw = r.json()["data"]["rates"]
-    return {c: float(raw[c]) for c in CURRENCIES if c != "USD" and c in raw}
+def _utc(ts: float) -> datetime:
+    return datetime.fromtimestamp(ts, timezone.utc)
 
 
-async def fetch_coinbase_change(client: httpx.AsyncClient) -> dict[str, float]:
+async def fetch_crypto_coinbase(client: httpx.AsyncClient) -> dict[str, Quote]:
+    async def one(code: str) -> tuple[str, Quote]:
+        r = await client.get(CB_TICKER_URL.format(code))
+        r.raise_for_status()
+        t = r.json()
+        price = float(t["price"])
+        as_of = datetime.fromisoformat(t["time"].replace("Z", "+00:00")) if t.get("time") else None
+        return code, Quote(1.0 / price, "Coinbase Exchange", as_of)
+
+    return dict(await asyncio.gather(*(one(c) for c in CRYPTO)))
+
+
+async def fetch_change_coinbase(client: httpx.AsyncClient) -> dict[str, float]:
     async def one(code: str) -> tuple[str, float]:
-        r = await client.get(COINBASE_STATS_URL.format(code))
+        r = await client.get(CB_STATS_URL.format(code))
         r.raise_for_status()
         s = r.json()
         opened, last = float(s["open"]), float(s["last"])
@@ -68,35 +93,59 @@ async def fetch_coinbase_change(client: httpx.AsyncClient) -> dict[str, float]:
     return dict(await asyncio.gather(*(one(c) for c in CRYPTO)))
 
 
-async def fetch_fiat(client: httpx.AsyncClient) -> dict[str, float]:
+async def fetch_fiat_er_api(client: httpx.AsyncClient) -> dict[str, Quote]:
     r = await client.get(ER_API_URL)
     r.raise_for_status()
     data = r.json()
     if data.get("result") != "success":
         raise RuntimeError(f"er-api error: {data.get('error-type')}")
-    return {c: float(data["rates"][c]) for c in FIAT}
+    ts = data.get("time_last_update_unix")
+    as_of = _utc(ts) if ts else None
+    return {c: Quote(float(data["rates"][c]), "open.er-api.com", as_of) for c in FIAT if c in data["rates"]}
 
 
-async def fetch_crypto(client: httpx.AsyncClient) -> tuple[dict[str, float], dict[str, float]]:
+async def fetch_fiat_coinbase(client: httpx.AsyncClient) -> dict[str, Quote]:
+    """Coinbase's reference table: covers fiat, states no time, and has been seen off-market."""
+    r = await client.get(CB_TABLE_URL, params={"currency": "USD"})
+    r.raise_for_status()
+    raw = r.json()["data"]["rates"]
+    return {c: Quote(float(raw[c]), "Coinbase", None) for c in FIAT if c in raw}
+
+
+async def fetch_crypto_coingecko(client: httpx.AsyncClient) -> tuple[dict[str, Quote], dict[str, float]]:
     r = await client.get(
         COINGECKO_URL,
-        params={"ids": ",".join(CRYPTO.values()), "vs_currencies": "usd", "include_24hr_change": "true"},
+        params={
+            "ids": ",".join(CRYPTO.values()),
+            "vs_currencies": "usd",
+            "include_24hr_change": "true",
+            "include_last_updated_at": "true",
+        },
     )
     r.raise_for_status()
     data = r.json()
-    rates, change = {}, {}
+    quotes, change = {}, {}
     for code, cg_id in CRYPTO.items():
-        rates[code] = 1.0 / float(data[cg_id]["usd"])
-        if (ch := data[cg_id].get("usd_24h_change")) is not None:
+        row = data[cg_id]
+        as_of = _utc(row["last_updated_at"]) if row.get("last_updated_at") else None
+        quotes[code] = Quote(1.0 / float(row["usd"]), "CoinGecko", as_of)
+        if (ch := row.get("usd_24h_change")) is not None:
             change[code] = round(float(ch), 2)
-    return rates, change
+    return quotes, change
 
 
-async def fetch_fallback(client: httpx.AsyncClient) -> dict[str, float]:
-    r = await client.get(FAWAZ_URL)
+async def fetch_official_rub(client: httpx.AsyncClient) -> dict:
+    """Bank of Russia official rate: the legal reference rate, published once a day."""
+    r = await client.get(CBR_URL)
     r.raise_for_status()
-    usd = r.json()["usd"]
-    return {c: float(usd[c.lower()]) for c in CURRENCIES}
+    data = r.json()
+    usd = data["Valute"]["USD"]
+    return {
+        "rate": float(usd["Value"]),
+        "previous": float(usd["Previous"]) if usd.get("Previous") else None,
+        "source": "ЦБ РФ",
+        "as_of": data.get("Date"),
+    }
 
 
 class RateService:
@@ -125,51 +174,64 @@ class RateService:
             return self._snapshot
 
     async def _refresh(self) -> RateSnapshot:
+        rates: dict[str, float] = {"USD": 1.0}
+        meta: dict[str, Quote] = {}
+        change: dict[str, float] = {}
+        official: dict[str, dict] = {}
+
+        def take(quotes: dict[str, Quote]) -> None:
+            for code, q in quotes.items():
+                if code not in rates:
+                    rates[code] = q.per_usd
+                    meta[code] = q
+
+        def missing() -> list[str]:
+            return [c for c in CURRENCIES if c not in rates]
+
         async with httpx.AsyncClient(
             timeout=self.timeout, transport=self.transport, headers={"User-Agent": "kurs-converter/1.0"}
         ) as client:
-            rates: dict[str, float] = {"USD": 1.0}
-            change: dict[str, float] = {}
-            sources: list[str] = []
-
-            cb, cb_change = await asyncio.gather(
-                fetch_coinbase(client), fetch_coinbase_change(client), return_exceptions=True
+            crypto, fiat, cbr, stats = await asyncio.gather(
+                fetch_crypto_coinbase(client),
+                fetch_fiat_er_api(client),
+                fetch_official_rub(client),
+                fetch_change_coinbase(client),
+                return_exceptions=True,
             )
-            if isinstance(cb, Exception):
-                log.warning("Coinbase rates failed: %s", cb)
-            else:
-                rates.update(cb)
-                sources.append("coinbase.com")
-            if isinstance(cb_change, Exception):
-                log.warning("Coinbase stats failed: %s", cb_change)
-            else:
-                change.update(cb_change)
-
-            missing = lambda: [c for c in CURRENCIES if c not in rates]  # noqa: E731
+            for name, result in (("crypto", crypto), ("fiat", fiat), ("cbr", cbr), ("stats", stats)):
+                if isinstance(result, Exception):
+                    log.warning("%s provider failed: %s", name, result)
+            if not isinstance(crypto, Exception):
+                take(crypto)
+            if not isinstance(fiat, Exception):
+                take(fiat)
+            if not isinstance(stats, Exception):
+                change.update(stats)
+            if not isinstance(cbr, Exception):
+                official["RUB"] = cbr
 
             if any(c in FIAT for c in missing()):
                 try:
-                    fiat = await fetch_fiat(client)
-                    rates.update({c: v for c, v in fiat.items() if c in missing()})
-                    sources.append("open.er-api.com")
+                    take(await fetch_fiat_coinbase(client))
                 except Exception as exc:
-                    log.warning("Fiat fallback failed: %s", exc)
+                    log.warning("Coinbase fiat table failed: %s", exc)
 
             if any(c in CRYPTO for c in missing()) or not change:
                 try:
-                    crypto, cg_change = await fetch_crypto(client)
-                    rates.update({c: v for c, v in crypto.items() if c in missing()})
+                    quotes, cg_change = await fetch_crypto_coingecko(client)
+                    take(quotes)
                     change = change or cg_change
-                    sources.append("coingecko.com")
                 except Exception as exc:
-                    log.warning("Crypto fallback failed: %s", exc)
+                    log.warning("CoinGecko failed: %s", exc)
+
+            if "RUB" in missing() and official.get("RUB"):
+                rates["RUB"] = official["RUB"]["rate"]
+                meta["RUB"] = Quote(official["RUB"]["rate"], "ЦБ РФ (официальный)", None)
 
             if missing():
-                fb = await fetch_fallback(client)
-                rates.update({c: fb[c] for c in missing()})
-                sources.append("fawazahmed0/currency-api")
+                raise RuntimeError(f"No rate for {', '.join(missing())}")
 
-        return RateSnapshot(rates, change, datetime.now(timezone.utc), sources)
+        return RateSnapshot(rates, meta, change, datetime.now(timezone.utc), official)
 
 
 def convert(rates: dict[str, float], amount: float, src: str, dst: str) -> float:

@@ -4,13 +4,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
-from app.rates import RateSnapshot, convert
+from app.rates import Quote, RateSnapshot, convert
 
+RATES = {"USD": 1.0, "RUB": 80.0, "IDR": 16000.0, "BTC": 1 / 100_000, "ETH": 1 / 4_000}
 FAKE = RateSnapshot(
-    rates={"USD": 1.0, "RUB": 80.0, "IDR": 16000.0, "BTC": 1 / 100_000, "ETH": 1 / 4_000},
+    rates=RATES,
+    meta={c: Quote(RATES[c], "test", datetime(2026, 1, 1, tzinfo=timezone.utc)) for c in RATES},
     change_24h={"BTC": 1.5, "ETH": -0.7},
-    updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-    sources=["test"],
+    fetched_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    official={"RUB": {"rate": 79.5, "source": "ЦБ РФ", "as_of": "2026-01-01T11:30:00+03:00"}},
 )
 
 
