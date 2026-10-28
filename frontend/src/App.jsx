@@ -351,7 +351,7 @@ export default function App() {
         <div className="ticket__foot">
           <span>1 {from} = <Copy id="rate-fwd" text={fmtRate(conv(1, from, to))} copied={copied} onCopy={onCopy} className="rate" /> {to}</span>
           <span>1 {to} = <Copy id="rate-back" text={fmtRate(conv(1, to, from))} copied={copied} onCopy={onCopy} className="rate" /> {from}</span>
-          {(from === "RUB" || to === "RUB") && cbr && (
+          {cbr && (
             <span className="foot-official">
               Офиц. курс ЦБ РФ{cbr.asOf ? ` на ${new Date(cbr.asOf).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}` : ""}:
               {" "}1 USD = <Copy id="cbr" text={fmtRate(cbr.rate)} copied={copied} onCopy={onCopy} className="rate" /> ₽
@@ -431,7 +431,7 @@ export default function App() {
                 </li>
               );
             })}
-            {(from === "RUB" || to === "RUB") && cbr && (
+            {cbr && (
               <li>
                 <b>RUB</b>
                 <span>ЦБ РФ (официальный)</span>
