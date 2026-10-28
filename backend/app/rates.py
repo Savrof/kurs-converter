@@ -187,7 +187,6 @@ async def fetch_official_rub(client: httpx.AsyncClient) -> dict:
     usd = data["Valute"]["USD"]
     return {
         "rate": float(usd["Value"]),
-        "previous": float(usd["Previous"]) if usd.get("Previous") else None,
         "source": "ЦБ РФ",
         "as_of": data.get("Date"),
     }

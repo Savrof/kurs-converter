@@ -190,7 +190,7 @@ function Guilloche({ theme }) {
   return <canvas ref={ref} className="guilloche" aria-hidden="true" />;
 }
 
-function CurrencyPicker({ id, value, onChange, exclude }) {
+function CurrencyPicker({ id, value, onChange }) {
   return (
     <div className="picker" role="radiogroup" aria-labelledby={id}>
       {CURRENCIES.map((c) => (
@@ -202,7 +202,6 @@ function CurrencyPicker({ id, value, onChange, exclude }) {
           className={`chip chip--${c.code.toLowerCase()}`}
           onClick={() => onChange(c.code)}
           title={c.name}
-          data-dim={exclude === c.code ? "" : undefined}
         >
           <span className="chip__sign">{c.sign}</span>
           {c.code}
@@ -432,7 +431,7 @@ export default function App() {
                 </li>
               );
             })}
-            {cbr && (
+            {(from === "RUB" || to === "RUB") && cbr && (
               <li>
                 <b>RUB</b>
                 <span>ЦБ РФ (официальный)</span>

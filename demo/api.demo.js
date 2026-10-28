@@ -85,7 +85,7 @@ async function officialRub() {
   const d = await getJSON("https://www.cbr-xml-daily.ru/daily_json.js");
   const v = d.Valute?.USD;
   if (!v?.Value) throw new Error("cbr: no USD");
-  return { rate: v.Value, prev: v.Previous ?? null, asOf: d.Date || null, src: "ЦБ РФ" };
+  return { rate: v.Value, asOf: d.Date || null, src: "ЦБ РФ" };
 }
 
 async function loadRates() {
