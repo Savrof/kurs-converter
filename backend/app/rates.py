@@ -45,6 +45,31 @@ class Quote:
 
 
 @dataclass
+class RateBook:
+    """Rates and where each came from, kept in one structure.
+
+    A rate cannot be recorded without the Quote that explains it, so the two
+    can never drift apart. First writer wins: providers are consulted best
+    first, and a later fallback only fills what is still missing.
+    """
+
+    rates: dict[str, float] = field(default_factory=lambda: {"USD": 1.0})
+    meta: dict[str, Quote] = field(default_factory=dict)
+
+    def add(self, quotes: dict[str, Quote] | None) -> None:
+        for code, quote in (quotes or {}).items():
+            if code not in self.rates:
+                self.rates[code] = quote.per_usd
+                self.meta[code] = quote
+
+    def missing(self) -> list[str]:
+        return [c for c in CURRENCIES if c not in self.rates]
+
+    def needs(self, codes) -> bool:
+        return any(c in codes for c in self.missing())
+
+
+@dataclass
 class RateSnapshot:
     rates: dict[str, float]            # units per 1 USD, includes "USD": 1.0
     meta: dict[str, Quote]             # which source each rate came from, and when
@@ -70,27 +95,47 @@ def _utc(ts: float) -> datetime:
     return datetime.fromtimestamp(ts, timezone.utc)
 
 
-async def fetch_crypto_coinbase(client: httpx.AsyncClient) -> dict[str, Quote]:
-    async def one(code: str) -> tuple[str, Quote]:
-        r = await client.get(CB_TICKER_URL.format(code))
+def _settled(name: str, result):
+    """A result from asyncio.gather, or None when that provider raised."""
+    if isinstance(result, Exception):
+        log.warning("%s unavailable: %s", name, result)
+        return None
+    return result
+
+
+async def _attempt(name: str, coro):
+    """Await a fallback provider, or None when it fails. Never raises."""
+    try:
+        return await coro
+    except Exception as exc:
+        log.warning("%s unavailable: %s", name, exc)
+        return None
+
+
+async def _per_product(client: httpx.AsyncClient, url: str, parse) -> dict:
+    """Ask one Coinbase endpoint per crypto product and parse each reply."""
+    async def one(code: str):
+        r = await client.get(url.format(code))
         r.raise_for_status()
-        t = r.json()
-        price = float(t["price"])
-        as_of = datetime.fromisoformat(t["time"].replace("Z", "+00:00")) if t.get("time") else None
-        return code, Quote(1.0 / price, "Coinbase Exchange", as_of)
+        return code, parse(r.json())
 
     return dict(await asyncio.gather(*(one(c) for c in CRYPTO)))
+
+
+async def fetch_crypto_coinbase(client: httpx.AsyncClient) -> dict[str, Quote]:
+    def parse(t: dict) -> Quote:
+        as_of = datetime.fromisoformat(t["time"].replace("Z", "+00:00")) if t.get("time") else None
+        return Quote(1.0 / float(t["price"]), "Coinbase Exchange", as_of)
+
+    return await _per_product(client, CB_TICKER_URL, parse)
 
 
 async def fetch_change_coinbase(client: httpx.AsyncClient) -> dict[str, float]:
-    async def one(code: str) -> tuple[str, float]:
-        r = await client.get(CB_STATS_URL.format(code))
-        r.raise_for_status()
-        s = r.json()
+    def parse(s: dict) -> float:
         opened, last = float(s["open"]), float(s["last"])
-        return code, round((last - opened) / opened * 100, 2)
+        return round((last - opened) / opened * 100, 2)
 
-    return dict(await asyncio.gather(*(one(c) for c in CRYPTO)))
+    return await _per_product(client, CB_STATS_URL, parse)
 
 
 async def fetch_fiat_er_api(client: httpx.AsyncClient) -> dict[str, Quote]:
@@ -157,12 +202,17 @@ class RateService:
         self._fetched_at = 0.0
         self._lock = asyncio.Lock()
 
+    def _is_fresh(self, force: bool) -> bool:
+        if force or self._snapshot is None:
+            return False
+        return time.monotonic() - self._fetched_at < self.ttl
+
     async def get(self, force: bool = False) -> RateSnapshot:
-        if not force and self._snapshot and time.monotonic() - self._fetched_at < self.ttl:
+        if self._is_fresh(force):
             return self._snapshot
         async with self._lock:
-            # Another request may have refreshed while we waited.
-            if not force and self._snapshot and time.monotonic() - self._fetched_at < self.ttl:
+            # Another caller may have refreshed while we waited for the lock.
+            if self._is_fresh(force):
                 return self._snapshot
             try:
                 self._snapshot = await self._refresh()
@@ -173,65 +223,48 @@ class RateService:
                 log.exception("Rate refresh failed, serving stale data")
             return self._snapshot
 
-    async def _refresh(self) -> RateSnapshot:
-        rates: dict[str, float] = {"USD": 1.0}
-        meta: dict[str, Quote] = {}
-        change: dict[str, float] = {}
+    async def _primary(self, client: httpx.AsyncClient) -> tuple[RateBook, dict, dict]:
+        """One parallel round over the preferred providers. Never raises:
+        whatever answered is recorded, whatever failed is logged."""
+        crypto, fiat, cbr, stats = await asyncio.gather(
+            fetch_crypto_coinbase(client),
+            fetch_fiat_er_api(client),
+            fetch_official_rub(client),
+            fetch_change_coinbase(client),
+            return_exceptions=True,
+        )
+        book = RateBook()
+        book.add(_settled("Coinbase Exchange", crypto))
+        book.add(_settled("open.er-api.com", fiat))
+        change = dict(_settled("Coinbase stats", stats) or {})
         official: dict[str, dict] = {}
+        if (rub := _settled("ЦБ РФ", cbr)) is not None:
+            official["RUB"] = rub
+        return book, change, official
 
-        def take(quotes: dict[str, Quote]) -> None:
-            for code, q in quotes.items():
-                if code not in rates:
-                    rates[code] = q.per_usd
-                    meta[code] = q
-
-        def missing() -> list[str]:
-            return [c for c in CURRENCIES if c not in rates]
-
+    async def _refresh(self) -> RateSnapshot:
         async with httpx.AsyncClient(
             timeout=self.timeout, transport=self.transport, headers={"User-Agent": "kurs-converter/1.0"}
         ) as client:
-            crypto, fiat, cbr, stats = await asyncio.gather(
-                fetch_crypto_coinbase(client),
-                fetch_fiat_er_api(client),
-                fetch_official_rub(client),
-                fetch_change_coinbase(client),
-                return_exceptions=True,
-            )
-            for name, result in (("crypto", crypto), ("fiat", fiat), ("cbr", cbr), ("stats", stats)):
-                if isinstance(result, Exception):
-                    log.warning("%s provider failed: %s", name, result)
-            if not isinstance(crypto, Exception):
-                take(crypto)
-            if not isinstance(fiat, Exception):
-                take(fiat)
-            if not isinstance(stats, Exception):
-                change.update(stats)
-            if not isinstance(cbr, Exception):
-                official["RUB"] = cbr
+            book, change, official = await self._primary(client)
 
-            if any(c in FIAT for c in missing()):
-                try:
-                    take(await fetch_fiat_coinbase(client))
-                except Exception as exc:
-                    log.warning("Coinbase fiat table failed: %s", exc)
+            if book.needs(FIAT):
+                book.add(await _attempt("Coinbase fiat table", fetch_fiat_coinbase(client)))
 
-            if any(c in CRYPTO for c in missing()) or not change:
-                try:
-                    quotes, cg_change = await fetch_crypto_coingecko(client)
-                    take(quotes)
+            if book.needs(CRYPTO) or not change:
+                if got := await _attempt("CoinGecko", fetch_crypto_coingecko(client)):
+                    quotes, cg_change = got
+                    book.add(quotes)
                     change = change or cg_change
-                except Exception as exc:
-                    log.warning("CoinGecko failed: %s", exc)
 
-            if "RUB" in missing() and official.get("RUB"):
-                rates["RUB"] = official["RUB"]["rate"]
-                meta["RUB"] = Quote(official["RUB"]["rate"], "ЦБ РФ (официальный)", None)
+            # Last resort for the rouble: the official rate, labelled as such.
+            if "RUB" in book.missing() and official.get("RUB"):
+                book.add({"RUB": Quote(official["RUB"]["rate"], "ЦБ РФ (официальный)", None)})
 
-            if missing():
-                raise RuntimeError(f"No rate for {', '.join(missing())}")
+            if book.missing():
+                raise RuntimeError(f"No rate for {', '.join(book.missing())}")
 
-        return RateSnapshot(rates, meta, change, datetime.now(timezone.utc), official)
+        return RateSnapshot(book.rates, book.meta, change, datetime.now(timezone.utc), official)
 
 
 def convert(rates: dict[str, float], amount: float, src: str, dst: str) -> float:
