@@ -51,3 +51,24 @@ def test_convert_usd(client):
 def test_unsupported_currency(client):
     r = client.get("/api/convert", params={"amount": 1, "from": "EUR", "to": "RUB"})
     assert r.status_code == 400
+
+
+def test_health(client):
+    assert client.get("/api/health").json() == {"status": "ok"}
+
+
+def test_rates_endpoint_reports_503_when_no_rates_exist(monkeypatch):
+    """With nothing cached and every provider down, say so rather than guess."""
+    async def boom(force=False):
+        raise RuntimeError("all providers down")
+
+    monkeypatch.setattr(main.service, "get", boom)
+    r = TestClient(main.app, raise_server_exceptions=False).get("/api/rates")
+    assert r.status_code == 503
+    assert "all providers down" in r.json()["detail"]
+
+
+def test_convert_reports_each_side_as_of(client):
+    body = client.get("/api/convert", params={"amount": 1, "from": "BTC", "to": "RUB"}).json()
+    assert set(body["as_of"]) == {"BTC", "RUB"}
+    assert body["fetched_at"]
